@@ -82,10 +82,17 @@ body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;min-height:100vh;back
 .place-item.selected .pi-check{background:#10b981;border-color:#10b981}
 .import-count{font-size:13px;color:#64748b;font-weight:500;text-align:center}
 .loading-spinner{text-align:center;padding:30px;color:#64748b;font-size:14px}
-.map-toggle{position:absolute;left:-16px;top:50%;transform:translateY(-50%);width:32px;height:48px;border-radius:8px 0 0 8px;background:#fff;border:1px solid #e2e8f0;border-right:none;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10;box-shadow:-2px 0 6px rgba(0,0,0,.08)}
-.map-panel{position:relative}
-.map-panel.collapsed{width:0;min-width:0;overflow:hidden;flex:0}
-.map-panel.collapsed .map-toggle{left:-32px;border-radius:8px 0 0 8px}
+.map-toggle{position:absolute;left:-32px;top:50%;transform:translateY(-50%);width:32px;height:48px;border-radius:8px 0 0 8px;background:#fff;border:1px solid #e2e8f0;border-right:none;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10;box-shadow:-2px 0 6px rgba(0,0,0,.08)}
+.map-panel{position:relative;overflow:visible}
+.map-panel.collapsed .map-inner{display:none}
+.map-panel.collapsed{flex:0 0 0px;min-width:0}
+.map-inner{display:flex;flex-direction:column;flex:1;height:100vh}
+.edit-panel{display:none;flex-direction:column;height:100vh;overflow-y:auto;background:#fff;padding:24px 20px}
+.edit-panel h2{font-size:17px;font-weight:800;color:#1e293b;margin-bottom:16px}
+.edit-panel .form-stack{gap:12px}
+.edit-panel .form-stack label{font-size:12px;font-weight:600;color:#64748b}
+.edit-panel .form-stack input,.edit-panel .form-stack select,.edit-panel .form-stack textarea{padding:10px 12px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;outline:none;width:100%;background:#f8fafc;font-family:inherit}
+.edit-panel .form-stack textarea{min-height:80px;resize:vertical}
 </style>
 </head>
 <body>
@@ -121,25 +128,41 @@ body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;min-height:100vh;back
   <button class="map-toggle" onclick="toggleMapPanel()" id="mapToggle" title="マップを閉じる">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
   </button>
-  <div class="map-setup" id="mapSetup">
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-    <h2>Googleマイマップを連携</h2>
-    <p>訪問先をピン打ちしたマイマップのリンクを貼ると、ここに地図が表示されます。</p>
-    <ol>
-      <li><a href="https://www.google.com/maps/d/" target="_blank" style="color:#3b82f6;font-weight:600">Googleマイマップ</a> を開く</li>
-      <li>「新しい地図を作成」→ 訪問先をピン打ち</li>
-      <li>「共有」→「リンクを知っている全員」に変更</li>
-      <li>共有リンクをコピーして下に貼り付け</li>
-    </ol>
-    <input id="mapUrlInput" placeholder="マイマップの共有リンクを貼り付け">
-    <button class="btn btn-primary" onclick="setMapUrl()">地図を表示</button>
-  </div>
-  <div class="hidden" id="mapEmbed" style="display:none;flex-direction:column;flex:1">
-    <div class="map-url-bar">
-      <input id="mapUrlEdit" readonly>
-      <button class="btn" onclick="clearMapUrl()" style="color:#ef4444;border-color:#fecaca">解除</button>
+  <div class="map-inner" id="mapInner">
+    <div class="map-setup" id="mapSetup">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <h2>Googleマイマップを連携</h2>
+      <p>訪問先をピン打ちしたマイマップのリンクを貼ると、ここに地図が表示されます。</p>
+      <ol>
+        <li><a href="https://www.google.com/maps/d/" target="_blank" style="color:#3b82f6;font-weight:600">Googleマイマップ</a> を開く</li>
+        <li>「新しい地図を作成」→ 訪問先をピン打ち</li>
+        <li>「共有」→「リンクを知っている全員」に変更</li>
+        <li>共有リンクをコピーして下に貼り付け</li>
+      </ol>
+      <input id="mapUrlInput" placeholder="マイマップの共有リンクを貼り付け">
+      <button class="btn btn-primary" onclick="setMapUrl()">地図を表示</button>
     </div>
-    <iframe id="mapIframe" style="flex:1;width:100%;border:none" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+    <div class="hidden" id="mapEmbed" style="display:none;flex-direction:column;flex:1">
+      <div class="map-url-bar">
+        <input id="mapUrlEdit" readonly>
+        <button class="btn" onclick="clearMapUrl()" style="color:#ef4444;border-color:#fecaca">解除</button>
+      </div>
+      <iframe id="mapIframe" style="flex:1;width:100%;border:none" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+    </div>
+  </div>
+  <div class="edit-panel" id="editPanel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 style="margin:0" id="editPanelTitle">訪問先を編集</h2>
+      <button class="icon-btn" onclick="closeEditPanel()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg></button>
+    </div>
+    <div class="form-stack">
+      <div><label>店名</label><input id="ep_name" placeholder="店名"></div>
+      <div><label>住所</label><input id="ep_address" placeholder="住所"></div>
+      <div><label>カテゴリ</label><select id="ep_category"><option>飲食店</option><option>美容室</option><option>クリニック</option><option>旅館</option><option>小売店</option><option>その他</option></select></div>
+      <div><label>メモ</label><textarea id="ep_memo" placeholder="メモ（課題・キーマン情報など）"></textarea></div>
+      <div><label>ホームページURL</label><input id="ep_website" placeholder="https://example.com"></div>
+      <button class="btn btn-primary" onclick="saveEditPanel()" style="margin-top:4px">保存</button>
+    </div>
   </div>
 </div>
 </div>
@@ -272,7 +295,7 @@ function render() {
     return `<div class="card" id="card-${v.id}">
       <div class="card-header">
         <span class="order-badge">${idx+1}</span>
-        <div class="card-info">
+        <div class="card-info" style="cursor:pointer" onclick="openEditPanel('${v.id}')">
           <div class="card-name">${esc(v.name)}</div>
           <div class="card-cat">${esc(v.category)}</div>
         </div>
@@ -463,15 +486,71 @@ function getMidFromStorage() {
 let mapPlaces = [];
 let selectedPlaces = new Set();
 
+let mapCollapsed = false;
+let editPanelId = null;
+
 function toggleMapPanel() {
   const panel = document.getElementById('mapPanel');
   const btn = document.getElementById('mapToggle');
-  panel.classList.toggle('collapsed');
-  const collapsed = panel.classList.contains('collapsed');
-  btn.innerHTML = collapsed
-    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>'
-    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
-  btn.title = collapsed ? 'マップを開く' : 'マップを閉じる';
+  mapCollapsed = !mapCollapsed;
+  panel.classList.toggle('collapsed', mapCollapsed);
+  if (!mapCollapsed) closeEditPanel();
+  updateToggleBtn();
+}
+
+function updateToggleBtn() {
+  const btn = document.getElementById('mapToggle');
+  if (mapCollapsed) {
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+    btn.title = 'マップを開く';
+  } else {
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
+    btn.title = 'マップを閉じる';
+  }
+}
+
+function openEditPanel(id) {
+  if (!mapCollapsed) return;
+  const v = getVisits().find(x => x.id === id);
+  if (!v) return;
+  editPanelId = id;
+  const panel = document.getElementById('mapPanel');
+  panel.classList.remove('collapsed');
+  panel.style.flex = '1';
+  document.getElementById('mapInner').style.display = 'none';
+  document.getElementById('editPanel').style.display = 'flex';
+  document.getElementById('editPanelTitle').textContent = v.name + ' を編集';
+  document.getElementById('ep_name').value = v.name;
+  document.getElementById('ep_address').value = v.address || '';
+  document.getElementById('ep_category').value = v.category;
+  document.getElementById('ep_memo').value = v.memo || '';
+  document.getElementById('ep_website').value = v.website || '';
+}
+
+function closeEditPanel() {
+  editPanelId = null;
+  const panel = document.getElementById('mapPanel');
+  document.getElementById('editPanel').style.display = 'none';
+  if (mapCollapsed) {
+    document.getElementById('mapInner').style.display = 'none';
+    panel.classList.add('collapsed');
+  } else {
+    document.getElementById('mapInner').style.display = 'flex';
+  }
+}
+
+function saveEditPanel() {
+  if (!editPanelId) return;
+  const visits = getVisits();
+  setVisits(visits.map(v => v.id === editPanelId ? {
+    ...v,
+    name: document.getElementById('ep_name').value.trim() || v.name,
+    address: document.getElementById('ep_address').value.trim(),
+    category: document.getElementById('ep_category').value,
+    memo: document.getElementById('ep_memo').value.trim(),
+    website: document.getElementById('ep_website').value.trim(),
+  } : v));
+  closeEditPanel();
 }
 
 async function fetchMapPlaces() {
