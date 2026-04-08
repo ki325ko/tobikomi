@@ -522,19 +522,37 @@ function toggleMapPanel() {
   if (panelState === 'map') {
     panelState = 'collapsed';
   } else {
+    if (panelState === 'edit' && !confirmIfDirty()) return;
     panelState = 'map';
     editPanelId = null;
   }
   applyPanelState();
 }
 
-function openEditPanel(id) {
-  if (panelState !== 'collapsed') return;
-  const v = getVisits().find(x => x.id === id);
-  if (!v) return;
-  editPanelId = id;
-  panelState = 'edit';
-  applyPanelState();
+function getEditPanelValues() {
+  return {
+    name: document.getElementById('ep_name').value.trim(),
+    address: document.getElementById('ep_address').value.trim(),
+    category: document.getElementById('ep_category').value,
+    memo: document.getElementById('ep_memo').value.trim(),
+    website: document.getElementById('ep_website').value.trim(),
+  };
+}
+
+function isEditDirty() {
+  if (!editPanelId) return false;
+  const v = getVisits().find(x => x.id === editPanelId);
+  if (!v) return false;
+  const cur = getEditPanelValues();
+  return cur.name !== v.name || cur.address !== (v.address||'') || cur.category !== v.category || cur.memo !== (v.memo||'') || cur.website !== (v.website||'');
+}
+
+function confirmIfDirty() {
+  if (!isEditDirty()) return true;
+  return confirm('変更が保存されていません。破棄しますか？');
+}
+
+function fillEditPanel(v) {
   document.getElementById('editPanelTitle').textContent = v.name + ' を編集';
   document.getElementById('ep_name').value = v.name;
   document.getElementById('ep_address').value = v.address || '';
@@ -543,7 +561,20 @@ function openEditPanel(id) {
   document.getElementById('ep_website').value = v.website || '';
 }
 
+function openEditPanel(id) {
+  if (panelState === 'map') return;
+  if (panelState === 'edit' && editPanelId === id) return;
+  if (panelState === 'edit' && !confirmIfDirty()) return;
+  const v = getVisits().find(x => x.id === id);
+  if (!v) return;
+  editPanelId = id;
+  panelState = 'edit';
+  applyPanelState();
+  fillEditPanel(v);
+}
+
 function closeEditPanel() {
+  if (!confirmIfDirty()) return;
   editPanelId = null;
   panelState = 'collapsed';
   applyPanelState();
@@ -551,16 +582,19 @@ function closeEditPanel() {
 
 function saveEditPanel() {
   if (!editPanelId) return;
+  const cur = getEditPanelValues();
   const visits = getVisits();
   setVisits(visits.map(v => v.id === editPanelId ? {
     ...v,
-    name: document.getElementById('ep_name').value.trim() || v.name,
-    address: document.getElementById('ep_address').value.trim(),
-    category: document.getElementById('ep_category').value,
-    memo: document.getElementById('ep_memo').value.trim(),
-    website: document.getElementById('ep_website').value.trim(),
+    name: cur.name || v.name,
+    address: cur.address,
+    category: cur.category,
+    memo: cur.memo,
+    website: cur.website,
   } : v));
-  closeEditPanel();
+  // 保存後もedit状態を維持、更新されたデータを再表示
+  const updated = getVisits().find(x => x.id === editPanelId);
+  if (updated) fillEditPanel(updated);
 }
 
 async function fetchMapPlaces() {
