@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>飛び込みプランナー - LIENS BOT</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;min-height:100vh;background:linear-gradient(180deg,#f8fafc 0%,#eef2f7 100%)}
@@ -97,15 +98,23 @@ body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;min-height:100vh;back
 .edit-panel .form-stack label{font-size:12px;font-weight:600;color:#64748b}
 .edit-panel .form-stack input,.edit-panel .form-stack select,.edit-panel .form-stack textarea{padding:10px 12px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;outline:none;width:100%;background:#f8fafc;font-family:inherit}
 .edit-panel .form-stack textarea{min-height:80px;resize:vertical}
+.sync-btn{display:flex;align-items:center;gap:4px;padding:5px 10px;border-radius:8px;border:1.5px solid #e2e8f0;background:#fff;font-size:11px;font-weight:600;color:#64748b;cursor:pointer;font-family:inherit;white-space:nowrap}
+.sync-btn.synced{border-color:#6ee7b7;background:#ecfdf5;color:#059669}
 </style>
 </head>
 <body>
 
 <div class="wrapper">
 <div class="container">
-  <div class="header">
-    <h1>🗂 飛び込みプランナー</h1>
-    <p>LIENS BOT 営業ツール</p>
+  <div class="header" style="display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <h1>🗂 飛び込みプランナー</h1>
+      <p>LIENS BOT 営業ツール</p>
+    </div>
+    <button class="sync-btn" id="syncBtn" onclick="handleSync()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115.36-6.36L21 8"/><path d="M3 22v-6h6"/><path d="M12 21a9 9 0 01-6.36-2.64L3 16"/></svg>
+      <span id="syncLabel">同期</span>
+    </button>
   </div>
   <div class="top-row">
     <input type="date" id="dateInput">
@@ -231,6 +240,132 @@ const STATUS = {
 };
 const INITIAL = [{id:'1',name:'サンプル美容室',address:'福井市中央1-1-1',category:'美容室',memo:'オーナーが若い。LINE活用に興味ありそう',website:'https://example.com',status:'pending',order:0}];
 
+// ============ GOOGLE DRIVE SYNC ============
+const GCID = '155775695368-6cj0mtohrm24gnkpb3si2ofpmnfjkl2t.apps.googleusercontent.com';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+const DRIVE_FILE = 'tobikomi_data.json';
+const TOKEN_KEY = 'tobikomi_gtoken';
+const TOKEN_EXP_KEY = 'tobikomi_gtoken_exp';
+let gAccessToken = null, driveFileId = null, syncBusy = false;
+
+function saveToken(token, expiresIn) {
+  gAccessToken = token;
+  const exp = Date.now() + (expiresIn - 60) * 1000;
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(TOKEN_EXP_KEY, String(exp));
+}
+function loadToken() {
+  const t = localStorage.getItem(TOKEN_KEY), exp = Number(localStorage.getItem(TOKEN_EXP_KEY) || 0);
+  if (t && Date.now() < exp) { gAccessToken = t; return true; }
+  gAccessToken = null; localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(TOKEN_EXP_KEY); return false;
+}
+function setSyncUI(label, ok) {
+  document.getElementById('syncLabel').textContent = label;
+  document.getElementById('syncBtn').classList.toggle('synced', ok);
+}
+
+function doLogin(callback) {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: GCID, scope: DRIVE_SCOPE,
+    callback: async (resp) => {
+      if (resp.error) { alert('ログインエラー: ' + (resp.error_description || resp.error)); return; }
+      saveToken(resp.access_token, resp.expires_in || 3600);
+      if (callback) await callback();
+    }
+  });
+  client.requestAccessToken();
+}
+
+async function driveApi(path, opts = {}) {
+  const r = await fetch('https://www.googleapis.com/' + path, {
+    ...opts, headers: { 'Authorization': 'Bearer ' + gAccessToken, ...(opts.headers || {}) }
+  });
+  if (r.status === 401) { gAccessToken = null; localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(TOKEN_EXP_KEY); setSyncUI('同期', false); throw new Error('再ログインしてください'); }
+  return r;
+}
+
+async function driveFindFile() {
+  const r = await driveApi("drive/v3/files?spaces=appDataFolder&q=name%3D'" + DRIVE_FILE + "'&fields=files(id)");
+  const j = await r.json();
+  driveFileId = (j.files && j.files[0]) ? j.files[0].id : null;
+  return driveFileId;
+}
+
+async function driveLoad() {
+  syncBusy = true;
+  try {
+    await driveFindFile();
+    if (!driveFileId) { syncBusy = false; return; }
+    const r = await driveApi('drive/v3/files/' + driveFileId + '?alt=media');
+    const data = await r.json();
+    if (data.allData && typeof data.allData === 'object') {
+      allData = mergeAllData(allData, data.allData);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(allData));
+      if (data.mapUrl) localStorage.setItem('sales-visits-map', data.mapUrl);
+      render();
+    }
+  } catch (e) { console.error('Drive load error:', e); }
+  syncBusy = false;
+}
+
+function mergeAllData(local, remote) {
+  const merged = { ...remote };
+  Object.keys(local).forEach(date => {
+    if (!merged[date]) { merged[date] = local[date]; return; }
+    const map = new Map();
+    merged[date].forEach(v => map.set(v.id, v));
+    local[date].forEach(v => {
+      const existing = map.get(v.id);
+      if (!existing || (v.updatedAt || 0) >= (existing.updatedAt || 0)) map.set(v.id, v);
+    });
+    merged[date] = [...map.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  });
+  return merged;
+}
+
+async function driveSaveNow() {
+  const mapUrl = localStorage.getItem('sales-visits-map') || '';
+  const data = JSON.stringify({ allData, mapUrl });
+  const meta = { name: DRIVE_FILE, mimeType: 'application/json', ...(!driveFileId ? { parents: ['appDataFolder'] } : {}) };
+  const boundary = '---tobikomi';
+  const body = '--' + boundary + '\r\nContent-Type:application/json;charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n--' + boundary + '\r\nContent-Type:application/json\r\n\r\n' + data + '\r\n--' + boundary + '--';
+  const url = driveFileId
+    ? 'upload/drive/v3/files/' + driveFileId + '?uploadType=multipart'
+    : 'upload/drive/v3/files?uploadType=multipart';
+  const method = driveFileId ? 'PATCH' : 'POST';
+  const r = await driveApi(url, { method, headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body });
+  if (!r.ok) { const e = await r.json(); throw new Error(e.error && e.error.message || r.status); }
+  if (!driveFileId) { const j = await r.json(); driveFileId = j.id; }
+  setSyncUI('同期済', true);
+}
+
+let saveTimer = null;
+function driveSave() {
+  if (syncBusy) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => driveSaveNow().catch(e => console.error('Drive save error:', e)), 1500);
+}
+
+async function doSync() {
+  setSyncUI('同期中...', false);
+  try {
+    await driveLoad();
+    await driveSaveNow();
+    setSyncUI('同期済', true);
+  } catch (e) {
+    if (e.message === '再ログインしてください') {
+      setSyncUI('同期', false);
+      doLogin(doSync);
+    } else { setSyncUI('エラー', false); alert('同期エラー: ' + e.message); }
+  }
+}
+
+async function handleSync() {
+  if (!gAccessToken && !loadToken()) { doLogin(doSync); return; }
+  await doSync();
+}
+
+// ============ DATA ============
 let allData = {};
 let currentDate = '';
 let currentFilter = 'all';
@@ -244,10 +379,13 @@ function init() {
   document.getElementById('dateInput').value = today;
   document.getElementById('dateInput').addEventListener('change', e => { currentDate = e.target.value; render(); });
   render();
+  // 自動ログイン復帰
+  if (loadToken()) { setSyncUI('同期済', true); doSync(); }
 }
 
 function save() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(allData)); } catch {}
+  if (gAccessToken) driveSave();
 }
 
 function getVisits() {
@@ -255,7 +393,8 @@ function getVisits() {
 }
 
 function setVisits(v) {
-  allData[currentDate] = v;
+  const now = Date.now();
+  allData[currentDate] = v.map(item => ({ ...item, updatedAt: now }));
   save();
   render();
 }
@@ -577,6 +716,7 @@ function setMapUrl() {
   localStorage.setItem('sales-visits-map', url);
   showMap(url, embedUrl);
   document.getElementById('importBtn').classList.remove('hidden');
+  if (gAccessToken) driveSave();
 }
 
 function showMap(originalUrl, embedUrl) {
