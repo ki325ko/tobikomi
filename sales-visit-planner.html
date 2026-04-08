@@ -82,6 +82,10 @@ body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;min-height:100vh;back
 .place-item.selected .pi-check{background:#10b981;border-color:#10b981}
 .import-count{font-size:13px;color:#64748b;font-weight:500;text-align:center}
 .loading-spinner{text-align:center;padding:30px;color:#64748b;font-size:14px}
+.map-toggle{position:absolute;left:-16px;top:50%;transform:translateY(-50%);width:32px;height:48px;border-radius:8px 0 0 8px;background:#fff;border:1px solid #e2e8f0;border-right:none;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10;box-shadow:-2px 0 6px rgba(0,0,0,.08)}
+.map-panel{position:relative}
+.map-panel.collapsed{width:0;min-width:0;overflow:hidden;flex:0}
+.map-panel.collapsed .map-toggle{left:-32px;border-radius:8px 0 0 8px}
 </style>
 </head>
 <body>
@@ -114,6 +118,9 @@ body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;min-height:100vh;back
 
 <!-- PC Map Panel -->
 <div class="map-panel" id="mapPanel">
+  <button class="map-toggle" onclick="toggleMapPanel()" id="mapToggle" title="マップを閉じる">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+  </button>
   <div class="map-setup" id="mapSetup">
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
     <h2>Googleマイマップを連携</h2>
@@ -456,6 +463,17 @@ function getMidFromStorage() {
 let mapPlaces = [];
 let selectedPlaces = new Set();
 
+function toggleMapPanel() {
+  const panel = document.getElementById('mapPanel');
+  const btn = document.getElementById('mapToggle');
+  panel.classList.toggle('collapsed');
+  const collapsed = panel.classList.contains('collapsed');
+  btn.innerHTML = collapsed
+    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>'
+    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
+  btn.title = collapsed ? 'マップを開く' : 'マップを閉じる';
+}
+
 async function fetchMapPlaces() {
   const mid = getMidFromStorage();
   if (!mid) { alert('先にマイマップのURLを設定してください'); return []; }
@@ -470,21 +488,59 @@ async function fetchMapPlaces() {
   placemarks.forEach(pm => {
     const name = (pm.querySelector('name') || {}).textContent || '';
     const coords = (pm.querySelector('coordinates') || {}).textContent || '';
-    const desc = (pm.querySelector('description') || {}).textContent || '';
     const parts = coords.trim().split(',');
     const lng = parseFloat(parts[0]) || 0;
     const lat = parseFloat(parts[1]) || 0;
-    places.push({ name: name.trim(), lat, lng, description: desc.trim() });
+    places.push({ name: name.trim(), lat, lng, address: '', website: '' });
   });
   return places;
 }
 
-async function reverseGeocode(lat, lng) {
+async function enrichPlaceData(place) {
+  // 1. Overpass APIで近くのPOIからwebsite/address/phoneを取得
   try {
-    const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&accept-language=ja&zoom=18');
-    const data = await res.json();
-    return data.display_name || '';
-  } catch { return ''; }
+    const q = '[out:json];(node(around:150,' + place.lat + ',' + place.lng + ')["name"];way(around:150,' + place.lat + ',' + place.lng + ')["name"];);out tags;';
+    const ovRes = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: {'Content-Type':'application/x-www-form-urlencoded'} });
+    const ovData = await ovRes.json();
+    // 名前が近いPOIを探す
+    const normalize = s => s.replace(/[\s\u3000]/g, '').toLowerCase();
+    const target = normalize(place.name);
+    let bestMatch = null;
+    for (const el of ovData.elements) {
+      if (!el.tags || !el.tags.name) continue;
+      const n = normalize(el.tags.name);
+      if (n === target || n.includes(target) || target.includes(n)) {
+        if (!bestMatch || (el.tags.website && !bestMatch.tags.website)) bestMatch = el;
+      }
+    }
+    if (bestMatch && bestMatch.tags) {
+      if (bestMatch.tags.website) place.website = bestMatch.tags.website;
+      if (bestMatch.tags['addr:full']) place.address = bestMatch.tags['addr:full'];
+      else if (bestMatch.tags['addr:street']) {
+        place.address = (bestMatch.tags['addr:province'] || '') + (bestMatch.tags['addr:city'] || '') + (bestMatch.tags['addr:street'] || '') + (bestMatch.tags['addr:housenumber'] || '');
+      }
+    }
+  } catch {}
+  // 2. 住所がまだなければNominatimで名前検索
+  if (!place.address) {
+    try {
+      const params = 'format=json&q=' + encodeURIComponent(place.name) + '&accept-language=ja&limit=1&viewbox=' + (place.lng-0.01) + ',' + (place.lat+0.01) + ',' + (place.lng+0.01) + ',' + (place.lat-0.01) + '&bounded=1';
+      const nmRes = await fetch('https://nominatim.openstreetmap.org/search?' + params);
+      const nmData = await nmRes.json();
+      if (nmData.length > 0) {
+        place.address = nmData[0].display_name.replace(/,\s*日本$/, '');
+      }
+    } catch {}
+  }
+  // 3. それでもなければ座標からリバースジオコーディング
+  if (!place.address) {
+    try {
+      const rvRes = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + place.lat + '&lon=' + place.lng + '&accept-language=ja&zoom=18');
+      const rvData = await rvRes.json();
+      if (rvData.display_name) place.address = rvData.display_name.replace(/,\s*日本$/, '');
+    } catch {}
+  }
+  return place;
 }
 
 async function showImportModal() {
@@ -499,13 +555,10 @@ async function showImportModal() {
       document.getElementById('placeList').innerHTML = '<div class="loading-spinner">マップにピンが見つかりませんでした</div>';
       return;
     }
-    // Reverse geocode all places
-    document.getElementById('placeList').innerHTML = '<div class="loading-spinner">住所を取得中... (0/' + mapPlaces.length + ')</div>';
+    document.getElementById('placeList').innerHTML = '<div class="loading-spinner">住所・HP情報を取得中... (0/' + mapPlaces.length + ')</div>';
     for (let i = 0; i < mapPlaces.length; i++) {
-      if (mapPlaces[i].lat && mapPlaces[i].lng) {
-        mapPlaces[i].address = await reverseGeocode(mapPlaces[i].lat, mapPlaces[i].lng);
-      }
-      document.getElementById('placeList').innerHTML = '<div class="loading-spinner">住所を取得中... (' + (i+1) + '/' + mapPlaces.length + ')</div>';
+      await enrichPlaceData(mapPlaces[i]);
+      document.getElementById('placeList').innerHTML = '<div class="loading-spinner">住所・HP情報を取得中... (' + (i+1) + '/' + mapPlaces.length + ')</div>';
     }
     renderPlaceList();
   } catch(e) {
@@ -521,7 +574,9 @@ function renderPlaceList() {
     return '<button class="place-item' + (sel ? ' selected' : '') + (already ? '' : '') + '" onclick="togglePlace(' + i + ')"' + (already ? ' style="opacity:0.5"' : '') + '>' +
       '<div class="pi-check">' + (sel ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : '') + '</div>' +
       '<div style="flex:1;min-width:0"><div class="pi-name">' + esc(p.name) + (already ? ' <span style="font-size:11px;color:#94a3b8">(登録済)</span>' : '') + '</div>' +
-      '<div class="pi-addr">' + esc(p.address || ('📍 ' + p.lat.toFixed(4) + ', ' + p.lng.toFixed(4))) + '</div></div></button>';
+      '<div class="pi-addr">' + esc(p.address || ('📍 ' + p.lat.toFixed(4) + ', ' + p.lng.toFixed(4))) + '</div>' +
+      (p.website ? '<div style="font-size:11px;color:#7c3aed;margin-top:2px">🔗 ' + esc(p.website.replace(new RegExp('^https?://'), '')) + '</div>' : '') +
+      '</div></button>';
   }).join('');
   updateImportCount();
 }
@@ -553,7 +608,7 @@ function importSelected() {
       address: p.address || '',
       category: 'その他',
       memo: '',
-      website: '',
+      website: p.website || '',
       status: 'pending',
       order: visits.length,
     });
