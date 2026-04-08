@@ -118,7 +118,7 @@ body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;min-height:100vh;back
       <input id="mapUrlEdit" readonly>
       <button class="btn" onclick="clearMapUrl()" style="color:#ef4444;border-color:#fecaca">解除</button>
     </div>
-    <iframe id="mapIframe" style="flex:1;width:100%;border:none"></iframe>
+    <iframe id="mapIframe" style="flex:1;width:100%;border:none" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
   </div>
 </div>
 </div>
@@ -376,9 +376,9 @@ function saveEdit() {
 
 // Map URL
 function toEmbedUrl(url) {
-  // Convert share link to embed: https://www.google.com/maps/d/u/0/viewer?mid=xxx -> embed?mid=xxx
+  // Extract mid from any Google My Maps URL
   let m = url.match(/mid=([^&]+)/);
-  if (m) return 'https://www.google.com/maps/d/embed?mid=' + m[1];
+  if (m) return 'https://www.google.com/maps/d/u/0/embed?mid=' + m[1];
   // Already embed URL
   if (url.includes('/embed')) return url;
   // Try replacing /edit or /viewer with /embed
