@@ -347,6 +347,32 @@ function render() {
 }
 
 let dragId = null;
+let autoScrollRAF = null;
+
+function getScrollContainer() {
+  const c = document.querySelector('.container');
+  return (window.innerWidth >= 768 && c.scrollHeight > c.clientHeight) ? c : document.documentElement;
+}
+
+function autoScroll(clientY) {
+  if (autoScrollRAF) cancelAnimationFrame(autoScrollRAF);
+  const edge = 60;
+  const speed = 12;
+  const sc = getScrollContainer();
+  const isDoc = sc === document.documentElement;
+  const rect = isDoc ? {top:0, bottom:window.innerHeight} : sc.getBoundingClientRect();
+  let delta = 0;
+  if (clientY < rect.top + edge) delta = -speed * (1 - (clientY - rect.top) / edge);
+  else if (clientY > rect.bottom - edge) delta = speed * (1 - (rect.bottom - clientY) / edge);
+  if (delta !== 0) {
+    sc.scrollTop += delta;
+    autoScrollRAF = requestAnimationFrame(() => autoScroll(clientY));
+  }
+}
+
+function stopAutoScroll() {
+  if (autoScrollRAF) { cancelAnimationFrame(autoScrollRAF); autoScrollRAF = null; }
+}
 
 function initDragAndDrop() {
   const cards = document.querySelectorAll('.card[draggable]');
@@ -360,11 +386,13 @@ function initDragAndDrop() {
       card.classList.remove('dragging');
       document.querySelectorAll('.card.drag-over').forEach(c => c.classList.remove('drag-over'));
       dragId = null;
+      stopAutoScroll();
     });
     card.addEventListener('dragover', e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
       if (card.dataset.id !== dragId) card.classList.add('drag-over');
+      autoScroll(e.clientY);
     });
     card.addEventListener('dragleave', () => {
       card.classList.remove('drag-over');
@@ -372,6 +400,7 @@ function initDragAndDrop() {
     card.addEventListener('drop', e => {
       e.preventDefault();
       card.classList.remove('drag-over');
+      stopAutoScroll();
       if (!dragId || card.dataset.id === dragId) return;
       const visits = getVisits();
       const fromIdx = visits.findIndex(v => v.id === dragId);
@@ -382,6 +411,9 @@ function initDragAndDrop() {
       setVisits(visits.map((v,i) => ({...v, order:i})));
     });
   });
+  // cardsコンテナでもdragoverを拾ってスクロール
+  const container = document.getElementById('cards');
+  container.addEventListener('dragover', e => { autoScroll(e.clientY); });
   // タッチ対応
   cards.forEach(card => {
     const handle = card.querySelector('.drag-handle');
@@ -398,15 +430,21 @@ function initDragAndDrop() {
     }, {passive:false});
     handle.addEventListener('touchmove', e => {
       if (!clone) return;
-      const dy = e.touches[0].clientY - touchY;
+      const cy = e.touches[0].clientY;
+      const dy = cy - touchY;
       clone.style.top = (card.getBoundingClientRect().top + dy) + 'px';
-      const el = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
+      autoScroll(cy);
+      // pointer-events:noneのcloneを一瞬隠してelementFromPointで下の要素を取得
+      clone.style.display = 'none';
+      const el = document.elementFromPoint(e.touches[0].clientX, cy);
+      clone.style.display = '';
       const target = el ? el.closest('.card[draggable]') : null;
       if (overCard && overCard !== target) overCard.classList.remove('drag-over');
       if (target && target.dataset.id !== dragId) { target.classList.add('drag-over'); overCard = target; }
       e.preventDefault();
     }, {passive:false});
     handle.addEventListener('touchend', () => {
+      stopAutoScroll();
       if (clone) { clone.remove(); clone = null; }
       card.classList.remove('dragging');
       if (overCard) {
