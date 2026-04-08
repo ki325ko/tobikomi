@@ -413,8 +413,12 @@ function loadMap() {
   if (url) showMap(url, toEmbedUrl(url));
 }
 
-init();
-loadMap();
+try {
+  init();
+  loadMap();
+} catch(e) {
+  document.body.innerHTML = '<pre style="color:red;padding:20px">JS Error: ' + e.message + '\n' + e.stack + '</pre>';
+}
 </script>
 </body>
 </html>
