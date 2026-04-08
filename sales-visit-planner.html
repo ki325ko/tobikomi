@@ -259,7 +259,7 @@ function render() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z"/></svg>
             HP
           </button>
-          <span class="hp-url">${esc(v.website.replace(/^https?:\\/\\//, ''))}</span>
+          <span class="hp-url">${esc(v.website.replace(new RegExp('^https?://'), ''))}</span>
         </div>` : ''}
         <div class="status-btns">
           ${Object.entries(STATUS).map(([k,s]) => `<button class="status-btn" style="background:${v.status===k?s.bg:'#fff'};color:${v.status===k?s.color:'#94a3b8'};border-color:${v.status===k?s.color:'#e2e8f0'};font-weight:${v.status===k?700:500}" onclick="setStatus('${v.id}','${k}')">${s.label}</button>`).join('')}
