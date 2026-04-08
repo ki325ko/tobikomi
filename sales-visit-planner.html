@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>飛び込みプランナー - LIENS BOT</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;min-height:100vh;background:linear-gradient(180deg,#f8fafc 0%,#eef2f7 100%)}
+.wrapper{display:flex;min-height:100vh}
+.container{max-width:480px;width:100%;margin:0 auto;padding:16px 12px;position:relative;min-height:100vh}
+.map-panel{display:none;flex:1;position:sticky;top:0;height:100vh;background:#e2e8f0;flex-direction:column}
+.map-panel iframe{flex:1;width:100%;height:100%;border:none}
+.map-setup{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:32px;text-align:center;gap:16px}
+.map-setup h2{font-size:18px;font-weight:800;color:#1e293b}
+.map-setup p{font-size:13px;color:#64748b;line-height:1.6;max-width:360px}
+.map-setup ol{text-align:left;font-size:13px;color:#475569;line-height:2;max-width:360px}
+.map-setup input{padding:10px 12px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;width:100%;max-width:360px;outline:none;background:#fff;font-family:inherit}
+.map-setup .btn{margin-top:4px}
+.map-url-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fff;border-bottom:1px solid #e2e8f0}
+.map-url-bar input{flex:1;padding:6px 10px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:12px;outline:none;background:#f8fafc;font-family:inherit}
+.map-url-bar button{font-size:12px;padding:6px 12px}
+@media(min-width:768px){
+  .wrapper{flex-direction:row}
+  .container{max-width:420px;flex-shrink:0;overflow-y:auto;height:100vh}
+  .map-panel{display:flex}
+}
+.header{margin-bottom:16px}
+.header h1{font-size:20px;font-weight:900;color:#0f172a;letter-spacing:-0.5px}
+.header p{font-size:11px;color:#94a3b8;font-weight:500}
+.top-row{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.top-row input[type=date]{padding:6px 10px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-weight:600;background:#f8fafc;outline:none;font-family:inherit}
+.btn-route{display:flex;align-items:center;gap:4px;background:#3b82f6;color:#fff;border:none;padding:6px 12px;font-size:13px;border-radius:10px;font-weight:600;cursor:pointer}
+.summary{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.summary span{font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px}
+.filters{display:flex;gap:4px;margin-bottom:14px;overflow-x:auto}
+.filter-btn{padding:4px 10px;border-radius:8px;border:1.5px solid #e2e8f0;background:#fff;font-size:11px;font-weight:600;color:#94a3b8;cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:inherit}
+.filter-btn.active{background:#0f172a;color:#fff;border-color:#0f172a}
+.cards{display:flex;flex-direction:column;gap:8px;padding-bottom:80px}
+.card{background:#fff;border-radius:14px;padding:12px 14px;box-shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);border:1px solid #f1f5f9}
+.card-header{display:flex;align-items:center;gap:8px}
+.order-badge{width:26px;height:26px;border-radius:8px;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0}
+.card-info{flex:1;min-width:0}
+.card-name{font-weight:700;font-size:15px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-cat{font-size:12px;color:#64748b;margin-top:2px}
+.status-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;flex-shrink:0}
+.icon-btn{background:none;border:none;cursor:pointer;padding:4px;border-radius:6px;display:flex;align-items:center;justify-content:center}
+.addr-row{display:flex;align-items:center;gap:6px;margin-top:8px}
+.map-btn{display:flex;align-items:center;gap:3px;padding:3px 8px;border-radius:8px;border:1px solid #bfdbfe;background:#eff6ff;color:#3b82f6;cursor:pointer;flex-shrink:0;font-size:12px;font-family:inherit}
+.hp-btn{display:flex;align-items:center;gap:3px;padding:3px 8px;border-radius:8px;border:1px solid #c4b5fd;background:#f5f3ff;color:#7c3aed;cursor:pointer;flex-shrink:0;font-size:12px;font-family:inherit}
+.addr-text{font-size:12px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.expanded{margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9}
+.memo-text{font-size:13px;color:#475569;line-height:1.5;margin-bottom:10px;white-space:pre-wrap}
+.hp-row{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.hp-url{font-size:12px;color:#7c3aed;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.status-btns{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.status-btn{font-size:11px;font-weight:500;padding:4px 10px;border-radius:8px;border:1.5px solid #e2e8f0;background:#fff;cursor:pointer;font-family:inherit}
+.action-row{display:flex;gap:6px;justify-content:space-between}
+.action-group{display:flex;gap:6px}
+.fab{position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:16px;background:#0f172a;color:#fff;border:none;box-shadow:0 4px 14px rgba(15,23,42,.35);cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:50}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:flex;align-items:flex-end;justify-content:center}
+.modal{background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 32px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.modal-header span{font-weight:800;font-size:16px;color:#1e293b}
+.form-stack{display:flex;flex-direction:column;gap:10px}
+.form-stack input,.form-stack select,.form-stack textarea{padding:10px 12px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;outline:none;width:100%;background:#f8fafc;font-family:inherit}
+.form-stack textarea{min-height:70px;resize:vertical}
+.btn{padding:10px 16px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;font-size:14px;font-weight:600;cursor:pointer;text-align:center;font-family:inherit}
+.btn-primary{background:#0f172a;color:#fff;border:none}
+.btn-row{display:flex;gap:8px}
+.btn-row .btn{flex:1}
+.empty{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+<div class="container">
+  <div class="header">
+    <h1>🗂 飛び込みプランナー</h1>
+    <p>LIENS BOT 営業ツール</p>
+  </div>
+  <div class="top-row">
+    <input type="date" id="dateInput">
+    <div style="flex:1"></div>
+    <button class="btn-route hidden" id="routeBtn" onclick="openRoute()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>
+      <span>ルート</span>
+    </button>
+  </div>
+  <div class="summary" id="summary"></div>
+  <div class="filters" id="filters"></div>
+  <div class="cards" id="cards"></div>
+  <button class="fab" onclick="showAddModal()">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+</div>
+
+<!-- PC Map Panel -->
+<div class="map-panel" id="mapPanel">
+  <div class="map-setup" id="mapSetup">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+    <h2>Googleマイマップを連携</h2>
+    <p>訪問先をピン打ちしたマイマップのリンクを貼ると、ここに地図が表示されます。</p>
+    <ol>
+      <li><a href="https://www.google.com/maps/d/" target="_blank" style="color:#3b82f6;font-weight:600">Googleマイマップ</a> を開く</li>
+      <li>「新しい地図を作成」→ 訪問先をピン打ち</li>
+      <li>「共有」→「リンクを知っている全員」に変更</li>
+      <li>共有リンクをコピーして下に貼り付け</li>
+    </ol>
+    <input id="mapUrlInput" placeholder="マイマップの共有リンクを貼り付け">
+    <button class="btn btn-primary" onclick="setMapUrl()">地図を表示</button>
+  </div>
+  <div class="hidden" id="mapEmbed" style="display:none;flex-direction:column;flex:1">
+    <div class="map-url-bar">
+      <input id="mapUrlEdit" readonly>
+      <button class="btn" onclick="clearMapUrl()" style="color:#ef4444;border-color:#fecaca">解除</button>
+    </div>
+    <iframe id="mapIframe" style="flex:1;width:100%;border:none"></iframe>
+  </div>
+</div>
+</div>
+
+<div class="overlay hidden" id="overlay" onclick="hideAddModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span>訪問先を追加</span>
+      <button class="icon-btn" onclick="hideAddModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg></button>
+    </div>
+    <div class="form-stack" id="addForm">
+      <input id="f_name" placeholder="店名 *">
+      <input id="f_address" placeholder="住所">
+      <select id="f_category"><option>飲食店</option><option>美容室</option><option>クリニック</option><option>旅館</option><option>小売店</option><option>その他</option></select>
+      <textarea id="f_memo" placeholder="メモ（課題・キーマン情報など）"></textarea>
+      <input id="f_website" placeholder="ホームページURL（例: example.com）">
+      <button class="btn btn-primary" onclick="addVisit()">追加する</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit overlay -->
+<div class="overlay hidden" id="editOverlay" onclick="hideEditModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span>編集</span>
+      <button class="icon-btn" onclick="hideEditModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg></button>
+    </div>
+    <div class="form-stack">
+      <input id="e_name" placeholder="店名">
+      <input id="e_address" placeholder="住所">
+      <select id="e_category"><option>飲食店</option><option>美容室</option><option>クリニック</option><option>旅館</option><option>小売店</option><option>その他</option></select>
+      <textarea id="e_memo" placeholder="メモ（課題・キーマン情報など）"></textarea>
+      <input id="e_website" placeholder="ホームページURL">
+      <button class="btn btn-primary" onclick="saveEdit()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'sales-visits';
+const STATUS = {
+  pending: { label: '未訪問', color: '#94a3b8', bg: '#f1f5f9' },
+  visited: { label: '訪問済', color: '#22c55e', bg: '#f0fdf4' },
+  followup: { label: '要フォロー', color: '#f59e0b', bg: '#fffbeb' },
+  rejected: { label: 'NG', color: '#ef4444', bg: '#fef2f2' },
+};
+const INITIAL = [{id:'1',name:'サンプル美容室',address:'福井市中央1-1-1',category:'美容室',memo:'オーナーが若い。LINE活用に興味ありそう',website:'https://example.com',status:'pending',order:0}];
+
+let allData = {};
+let currentDate = '';
+let currentFilter = 'all';
+let editingId = null;
+
+function init() {
+  try { allData = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch { allData = {}; }
+  const today = new Date().toISOString().slice(0,10);
+  if (Object.keys(allData).length === 0) allData[today] = INITIAL;
+  currentDate = today;
+  document.getElementById('dateInput').value = today;
+  document.getElementById('dateInput').addEventListener('change', e => { currentDate = e.target.value; render(); });
+  render();
+}
+
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(allData)); } catch {}
+}
+
+function getVisits() {
+  return (allData[currentDate] || []).sort((a,b) => (a.order??0) - (b.order??0));
+}
+
+function setVisits(v) {
+  allData[currentDate] = v;
+  save();
+  render();
+}
+
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function render() {
+  const visits = getVisits();
+  const filtered = currentFilter === 'all' ? visits : visits.filter(v => v.status === currentFilter);
+
+  // Summary
+  const counts = {};
+  Object.keys(STATUS).forEach(k => counts[k] = 0);
+  visits.forEach(v => counts[v.status]++);
+  document.getElementById('summary').innerHTML = Object.entries(STATUS).map(([k,v]) =>
+    `<span style="background:${v.bg};color:${v.color}">${v.label} ${counts[k]}</span>`
+  ).join('');
+
+  // Route btn
+  const pendingWithAddr = visits.filter(v => v.status === 'pending' && v.address);
+  document.getElementById('routeBtn').classList.toggle('hidden', pendingWithAddr.length < 2);
+
+  // Filters
+  document.getElementById('filters').innerHTML =
+    `<button class="filter-btn ${currentFilter==='all'?'active':''}" onclick="setFilter('all')">全て (${visits.length})</button>` +
+    Object.entries(STATUS).map(([k,v]) => {
+      const active = currentFilter === k;
+      const style = active ? `background:${v.bg};color:${v.color};border-color:${v.color}` : '';
+      return `<button class="filter-btn ${active?'active':''}" style="${style}" onclick="setFilter('${k}')">${v.label} (${counts[k]})</button>`;
+    }).join('');
+
+  // Cards
+  if (filtered.length === 0) {
+    document.getElementById('cards').innerHTML = `<div class="empty">${visits.length===0?'＋ ボタンで訪問先を追加しましょう':'該当する訪問先がありません'}</div>`;
+    return;
+  }
+
+  document.getElementById('cards').innerHTML = filtered.map(v => {
+    const idx = visits.indexOf(v);
+    const st = STATUS[v.status];
+    return `<div class="card" id="card-${v.id}">
+      <div class="card-header">
+        <span class="order-badge">${idx+1}</span>
+        <div class="card-info">
+          <div class="card-name">${esc(v.name)}</div>
+          <div class="card-cat">${esc(v.category)}</div>
+        </div>
+        <span class="status-badge" style="background:${st.bg};color:${st.color}">${st.label}</span>
+        <button class="icon-btn" onclick="toggle('${v.id}')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
+      ${v.address ? `<div class="addr-row">
+        <button class="map-btn" onclick="openMap('${esc(v.address)}')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          地図
+        </button>
+        <span class="addr-text">${esc(v.address)}</span>
+      </div>` : ''}
+      <div class="expanded hidden" id="exp-${v.id}">
+        ${v.memo ? `<div class="memo-text">${esc(v.memo)}</div>` : ''}
+        ${v.website ? `<div class="hp-row">
+          <button class="hp-btn" onclick="window.open('${v.website.startsWith('http')?v.website:'https://'+v.website}','_blank')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z"/></svg>
+            HP
+          </button>
+          <span class="hp-url">${esc(v.website.replace(/^https?:\\/\\//, ''))}</span>
+        </div>` : ''}
+        <div class="status-btns">
+          ${Object.entries(STATUS).map(([k,s]) => `<button class="status-btn" style="background:${v.status===k?s.bg:'#fff'};color:${v.status===k?s.color:'#94a3b8'};border-color:${v.status===k?s.color:'#e2e8f0'};font-weight:${v.status===k?700:500}" onclick="setStatus('${v.id}','${k}')">${s.label}</button>`).join('')}
+        </div>
+        <div class="action-row">
+          <div class="action-group">
+            ${idx > 0 ? `<button class="icon-btn" onclick="moveVisit(${idx},${idx-1})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>` : ''}
+            ${idx < visits.length-1 ? `<button class="icon-btn" onclick="moveVisit(${idx},${idx+1})"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>` : ''}
+          </div>
+          <div class="action-group">
+            <button class="icon-btn" onclick="showEditModal('${v.id}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+            <button class="icon-btn" onclick="deleteVisit('${v.id}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+
+function toggle(id) {
+  const el = document.getElementById('exp-'+id);
+  if (el) el.classList.toggle('hidden');
+}
+
+function setFilter(f) { currentFilter = f; render(); }
+
+function setStatus(id, status) {
+  const visits = getVisits();
+  setVisits(visits.map(v => v.id===id ? {...v, status} : v));
+}
+
+function moveVisit(from, to) {
+  const arr = getVisits();
+  const [item] = arr.splice(from, 1);
+  arr.splice(to, 0, item);
+  setVisits(arr.map((v,i) => ({...v, order:i})));
+}
+
+function deleteVisit(id) {
+  if (!confirm('削除しますか？')) return;
+  setVisits(getVisits().filter(v => v.id !== id));
+}
+
+function openMap(addr) {
+  window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(addr), '_blank');
+}
+
+function openRoute() {
+  const addrs = getVisits().filter(v => v.status==='pending' && v.address).map(v => v.address);
+  if (addrs.length < 2) return;
+  const origin = encodeURIComponent(addrs[0]);
+  const dest = encodeURIComponent(addrs[addrs.length-1]);
+  const wp = addrs.slice(1,-1).map(encodeURIComponent).join('|');
+  window.open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}${wp?'&waypoints='+wp:''}&travelmode=driving`, '_blank');
+}
+
+function showAddModal() {
+  document.getElementById('overlay').classList.remove('hidden');
+  document.getElementById('f_name').value = '';
+  document.getElementById('f_address').value = '';
+  document.getElementById('f_category').value = '飲食店';
+  document.getElementById('f_memo').value = '';
+  document.getElementById('f_website').value = '';
+  setTimeout(() => document.getElementById('f_name').focus(), 100);
+}
+function hideAddModal() { document.getElementById('overlay').classList.add('hidden'); }
+
+function addVisit() {
+  const name = document.getElementById('f_name').value.trim();
+  if (!name) return;
+  const visits = getVisits();
+  visits.push({
+    id: genId(),
+    name,
+    address: document.getElementById('f_address').value.trim(),
+    category: document.getElementById('f_category').value,
+    memo: document.getElementById('f_memo').value.trim(),
+    website: document.getElementById('f_website').value.trim(),
+    status: 'pending',
+    order: visits.length,
+  });
+  setVisits(visits);
+  hideAddModal();
+}
+
+function showEditModal(id) {
+  editingId = id;
+  const v = getVisits().find(x => x.id === id);
+  if (!v) return;
+  document.getElementById('e_name').value = v.name;
+  document.getElementById('e_address').value = v.address || '';
+  document.getElementById('e_category').value = v.category;
+  document.getElementById('e_memo').value = v.memo || '';
+  document.getElementById('e_website').value = v.website || '';
+  document.getElementById('editOverlay').classList.remove('hidden');
+}
+function hideEditModal() { document.getElementById('editOverlay').classList.add('hidden'); editingId = null; }
+
+function saveEdit() {
+  if (!editingId) return;
+  const visits = getVisits();
+  setVisits(visits.map(v => v.id === editingId ? {
+    ...v,
+    name: document.getElementById('e_name').value.trim() || v.name,
+    address: document.getElementById('e_address').value.trim(),
+    category: document.getElementById('e_category').value,
+    memo: document.getElementById('e_memo').value.trim(),
+    website: document.getElementById('e_website').value.trim(),
+  } : v));
+  hideEditModal();
+}
+
+// Map URL
+function toEmbedUrl(url) {
+  // Convert share link to embed: https://www.google.com/maps/d/u/0/viewer?mid=xxx -> embed?mid=xxx
+  let m = url.match(/mid=([^&]+)/);
+  if (m) return 'https://www.google.com/maps/d/embed?mid=' + m[1];
+  // Already embed URL
+  if (url.includes('/embed')) return url;
+  // Try replacing /edit or /viewer with /embed
+  return url.replace(/\/(edit|viewer)/, '/embed');
+}
+
+function setMapUrl() {
+  const url = document.getElementById('mapUrlInput').value.trim();
+  if (!url) return;
+  const embedUrl = toEmbedUrl(url);
+  localStorage.setItem('sales-visits-map', url);
+  showMap(url, embedUrl);
+}
+
+function showMap(originalUrl, embedUrl) {
+  document.getElementById('mapSetup').style.display = 'none';
+  document.getElementById('mapEmbed').style.display = 'flex';
+  document.getElementById('mapUrlEdit').value = originalUrl;
+  document.getElementById('mapIframe').src = embedUrl;
+}
+
+function clearMapUrl() {
+  localStorage.removeItem('sales-visits-map');
+  document.getElementById('mapSetup').style.display = '';
+  document.getElementById('mapEmbed').style.display = 'none';
+  document.getElementById('mapIframe').src = '';
+  document.getElementById('mapUrlInput').value = '';
+}
+
+function loadMap() {
+  const url = localStorage.getItem('sales-visits-map');
+  if (url) showMap(url, toEmbedUrl(url));
+}
+
+init();
+loadMap();
+</script>
+</body>
+</html>
