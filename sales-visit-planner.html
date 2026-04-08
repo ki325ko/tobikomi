@@ -486,39 +486,55 @@ function getMidFromStorage() {
 let mapPlaces = [];
 let selectedPlaces = new Set();
 
-let mapCollapsed = false;
+// 右パネルの状態: 'map' | 'collapsed' | 'edit'
+let panelState = 'map';
 let editPanelId = null;
 
-function toggleMapPanel() {
+function applyPanelState() {
   const panel = document.getElementById('mapPanel');
+  const mapInner = document.getElementById('mapInner');
+  const editPanel = document.getElementById('editPanel');
   const btn = document.getElementById('mapToggle');
-  mapCollapsed = !mapCollapsed;
-  panel.classList.toggle('collapsed', mapCollapsed);
-  if (!mapCollapsed) closeEditPanel();
-  updateToggleBtn();
-}
-
-function updateToggleBtn() {
-  const btn = document.getElementById('mapToggle');
-  if (mapCollapsed) {
-    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
-    btn.title = 'マップを開く';
-  } else {
+  panel.style.flex = '';
+  if (panelState === 'map') {
+    panel.classList.remove('collapsed');
+    mapInner.style.display = 'flex';
+    editPanel.style.display = 'none';
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
     btn.title = 'マップを閉じる';
+  } else if (panelState === 'collapsed') {
+    panel.classList.add('collapsed');
+    mapInner.style.display = 'none';
+    editPanel.style.display = 'none';
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+    btn.title = 'マップを開く';
+  } else if (panelState === 'edit') {
+    panel.classList.remove('collapsed');
+    panel.style.flex = '1';
+    mapInner.style.display = 'none';
+    editPanel.style.display = 'flex';
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+    btn.title = 'マップを開く';
   }
 }
 
+function toggleMapPanel() {
+  if (panelState === 'map') {
+    panelState = 'collapsed';
+  } else {
+    panelState = 'map';
+    editPanelId = null;
+  }
+  applyPanelState();
+}
+
 function openEditPanel(id) {
-  if (!mapCollapsed) return;
+  if (panelState !== 'collapsed') return;
   const v = getVisits().find(x => x.id === id);
   if (!v) return;
   editPanelId = id;
-  const panel = document.getElementById('mapPanel');
-  panel.classList.remove('collapsed');
-  panel.style.flex = '1';
-  document.getElementById('mapInner').style.display = 'none';
-  document.getElementById('editPanel').style.display = 'flex';
+  panelState = 'edit';
+  applyPanelState();
   document.getElementById('editPanelTitle').textContent = v.name + ' を編集';
   document.getElementById('ep_name').value = v.name;
   document.getElementById('ep_address').value = v.address || '';
@@ -529,14 +545,8 @@ function openEditPanel(id) {
 
 function closeEditPanel() {
   editPanelId = null;
-  const panel = document.getElementById('mapPanel');
-  document.getElementById('editPanel').style.display = 'none';
-  if (mapCollapsed) {
-    document.getElementById('mapInner').style.display = 'none';
-    panel.classList.add('collapsed');
-  } else {
-    document.getElementById('mapInner').style.display = 'flex';
-  }
+  panelState = 'collapsed';
+  applyPanelState();
 }
 
 function saveEditPanel() {
