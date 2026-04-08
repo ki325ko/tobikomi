@@ -72,6 +72,16 @@ body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;min-height:100vh;back
 .btn-row .btn{flex:1}
 .empty{text-align:center;padding:40px;color:#94a3b8;font-size:14px}
 .hidden{display:none}
+.import-btn{display:flex;align-items:center;gap:4px;background:#10b981;color:#fff;border:none;padding:6px 12px;font-size:13px;border-radius:10px;font-weight:600;cursor:pointer;font-family:inherit}
+.place-list{display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow-y:auto}
+.place-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1.5px solid #e2e8f0;background:#f8fafc;cursor:pointer;font-family:inherit;text-align:left;width:100%}
+.place-item:hover{background:#eff6ff;border-color:#93c5fd}
+.place-item .pi-name{font-weight:700;font-size:14px;color:#1e293b}
+.place-item .pi-addr{font-size:12px;color:#64748b;margin-top:2px}
+.place-item .pi-check{width:20px;height:20px;border-radius:6px;border:1.5px solid #e2e8f0;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.place-item.selected .pi-check{background:#10b981;border-color:#10b981}
+.import-count{font-size:13px;color:#64748b;font-weight:500;text-align:center}
+.loading-spinner{text-align:center;padding:30px;color:#64748b;font-size:14px}
 </style>
 </head>
 <body>
@@ -85,6 +95,10 @@ body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;min-height:100vh;back
   <div class="top-row">
     <input type="date" id="dateInput">
     <div style="flex:1"></div>
+    <button class="import-btn hidden" id="importBtn" onclick="showImportModal()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span>マップから取込</span>
+    </button>
     <button class="btn-route hidden" id="routeBtn" onclick="openRoute()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>
       <span>ルート</span>
@@ -154,6 +168,21 @@ body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;min-height:100vh;back
       <textarea id="e_memo" placeholder="メモ（課題・キーマン情報など）"></textarea>
       <input id="e_website" placeholder="ホームページURL">
       <button class="btn btn-primary" onclick="saveEdit()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import from map overlay -->
+<div class="overlay hidden" id="importOverlay" onclick="hideImportModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span>マップから取込</span>
+      <button class="icon-btn" onclick="hideImportModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg></button>
+    </div>
+    <div class="import-count" id="importCount"></div>
+    <div class="place-list" id="placeList"></div>
+    <div style="margin-top:12px">
+      <button class="btn btn-primary" style="width:100%" id="importSubmit" onclick="importSelected()">選択した訪問先を追加</button>
     </div>
   </div>
 </div>
@@ -391,6 +420,7 @@ function setMapUrl() {
   const embedUrl = toEmbedUrl(url);
   localStorage.setItem('sales-visits-map', url);
   showMap(url, embedUrl);
+  document.getElementById('importBtn').classList.remove('hidden');
 }
 
 function showMap(originalUrl, embedUrl) {
@@ -406,11 +436,130 @@ function clearMapUrl() {
   document.getElementById('mapEmbed').style.display = 'none';
   document.getElementById('mapIframe').src = '';
   document.getElementById('mapUrlInput').value = '';
+  document.getElementById('importBtn').classList.add('hidden');
 }
 
 function loadMap() {
   const url = localStorage.getItem('sales-visits-map');
-  if (url) showMap(url, toEmbedUrl(url));
+  if (url) {
+    showMap(url, toEmbedUrl(url));
+    document.getElementById('importBtn').classList.remove('hidden');
+  }
+}
+
+function getMidFromStorage() {
+  const url = localStorage.getItem('sales-visits-map') || '';
+  const m = url.match(/mid=([^&]+)/);
+  return m ? m[1] : null;
+}
+
+let mapPlaces = [];
+let selectedPlaces = new Set();
+
+async function fetchMapPlaces() {
+  const mid = getMidFromStorage();
+  if (!mid) { alert('先にマイマップのURLを設定してください'); return []; }
+  const kmlUrl = 'https://www.google.com/maps/d/kml?forcekml=1&mid=' + mid;
+  const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(kmlUrl);
+  const res = await fetch(proxyUrl);
+  const text = await res.text();
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(text, 'text/xml');
+  const placemarks = doc.querySelectorAll('Placemark');
+  const places = [];
+  placemarks.forEach(pm => {
+    const name = (pm.querySelector('name') || {}).textContent || '';
+    const coords = (pm.querySelector('coordinates') || {}).textContent || '';
+    const desc = (pm.querySelector('description') || {}).textContent || '';
+    const parts = coords.trim().split(',');
+    const lng = parseFloat(parts[0]) || 0;
+    const lat = parseFloat(parts[1]) || 0;
+    places.push({ name: name.trim(), lat, lng, description: desc.trim() });
+  });
+  return places;
+}
+
+async function reverseGeocode(lat, lng) {
+  try {
+    const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&accept-language=ja&zoom=18');
+    const data = await res.json();
+    return data.display_name || '';
+  } catch { return ''; }
+}
+
+async function showImportModal() {
+  document.getElementById('importOverlay').classList.remove('hidden');
+  document.getElementById('placeList').innerHTML = '<div class="loading-spinner">マップデータを読み込み中...</div>';
+  document.getElementById('importCount').textContent = '';
+  document.getElementById('importSubmit').disabled = true;
+  selectedPlaces.clear();
+  try {
+    mapPlaces = await fetchMapPlaces();
+    if (mapPlaces.length === 0) {
+      document.getElementById('placeList').innerHTML = '<div class="loading-spinner">マップにピンが見つかりませんでした</div>';
+      return;
+    }
+    // Reverse geocode all places
+    document.getElementById('placeList').innerHTML = '<div class="loading-spinner">住所を取得中... (0/' + mapPlaces.length + ')</div>';
+    for (let i = 0; i < mapPlaces.length; i++) {
+      if (mapPlaces[i].lat && mapPlaces[i].lng) {
+        mapPlaces[i].address = await reverseGeocode(mapPlaces[i].lat, mapPlaces[i].lng);
+      }
+      document.getElementById('placeList').innerHTML = '<div class="loading-spinner">住所を取得中... (' + (i+1) + '/' + mapPlaces.length + ')</div>';
+    }
+    renderPlaceList();
+  } catch(e) {
+    document.getElementById('placeList').innerHTML = '<div class="loading-spinner">読み込みに失敗しました: ' + e.message + '</div>';
+  }
+}
+
+function renderPlaceList() {
+  const existing = getVisits().map(v => v.name);
+  document.getElementById('placeList').innerHTML = mapPlaces.map((p, i) => {
+    const already = existing.includes(p.name);
+    const sel = selectedPlaces.has(i);
+    return '<button class="place-item' + (sel ? ' selected' : '') + (already ? '' : '') + '" onclick="togglePlace(' + i + ')"' + (already ? ' style="opacity:0.5"' : '') + '>' +
+      '<div class="pi-check">' + (sel ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : '') + '</div>' +
+      '<div style="flex:1;min-width:0"><div class="pi-name">' + esc(p.name) + (already ? ' <span style="font-size:11px;color:#94a3b8">(登録済)</span>' : '') + '</div>' +
+      '<div class="pi-addr">' + esc(p.address || ('📍 ' + p.lat.toFixed(4) + ', ' + p.lng.toFixed(4))) + '</div></div></button>';
+  }).join('');
+  updateImportCount();
+}
+
+function togglePlace(i) {
+  if (selectedPlaces.has(i)) selectedPlaces.delete(i);
+  else selectedPlaces.add(i);
+  renderPlaceList();
+}
+
+function updateImportCount() {
+  const n = selectedPlaces.size;
+  document.getElementById('importCount').textContent = n > 0 ? n + '件選択中' : 'タップして選択してください';
+  document.getElementById('importSubmit').disabled = n === 0;
+}
+
+function hideImportModal() {
+  document.getElementById('importOverlay').classList.add('hidden');
+}
+
+function importSelected() {
+  if (selectedPlaces.size === 0) return;
+  const visits = getVisits();
+  selectedPlaces.forEach(i => {
+    const p = mapPlaces[i];
+    visits.push({
+      id: genId(),
+      name: p.name,
+      address: p.address || '',
+      category: 'その他',
+      memo: '',
+      website: '',
+      status: 'pending',
+      order: visits.length,
+    });
+  });
+  setVisits(visits);
+  hideImportModal();
 }
 
 try {
